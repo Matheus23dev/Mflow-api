@@ -35,6 +35,14 @@ const migration = spawnSync(npx, ['prisma', 'migrate', 'deploy'], {
 if (migration.error) throw migration.error;
 if (migration.status !== 0) process.exit(migration.status || 1);
 
+const seed = spawnSync(npx, ['prisma', 'db', 'seed'], {
+  env: process.env,
+  stdio: 'inherit',
+});
+
+if (seed.error) throw seed.error;
+if (seed.status !== 0) process.exit(seed.status || 1);
+
 const server = spawn(process.execPath, ['dist/main'], {
   env: process.env,
   stdio: 'inherit',

@@ -5,11 +5,15 @@ import { PrismaService } from '../src/prisma/prisma.service';
 const prisma = new PrismaService();
 
 async function main() {
+  const existingUsers = await prisma.user.count();
+  if (existingUsers > 0) {
+    console.log('O banco já possui usuário. Seed inicial ignorado.');
+    return;
+  }
+
   const passwordHash = await bcrypt.hash('123456', 12);
-  await prisma.user.upsert({
-    where: { email: 'admin@gmail.com' },
-    update: { name: 'Administrador', passwordHash, role: 'ADMIN' },
-    create: {
+  await prisma.user.create({
+    data: {
       name: 'Administrador',
       email: 'admin@gmail.com',
       passwordHash,

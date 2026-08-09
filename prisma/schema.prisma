@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum LoanType {
+  WEEKLY
+  MONTHLY_INTEREST
+}
+
+enum LoanFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum LoanStatus {
+  ACTIVE
+  OVERDUE
+  PAID
+  RENEWED
+  CANCELLED
+}
+
+enum ChargeStatus {
+  PENDING
+  PAID
+  OVERDUE
+  PARTIAL
+}
+
+enum PaymentType {
+  INSTALLMENT
+  INTEREST
+  PRINCIPAL
+  PAYOFF
+  RENEWAL_ENTRY
+}
+
+enum PaymentMethod {
+  PIX
+  CASH
+  TRANSFER
+  OTHER
+}
+
+enum CashTransactionType {
+  INCOME
+  EXPENSE
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         UserRole   @default(ADMIN)
+  customers    Customer[]
+  cashTransactions CashTransaction[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Customer {
+  id        String    @id @default(cuid())
+  ownerId   String
+  owner     User      @relation(fields: [ownerId], references: [id])
+  name      String
+  phone     String
+  cpf       String?
+  address   String?
+  notes     String?   @db.Text
+  loans     Loan[]
+  payments  Payment[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([ownerId, cpf])
+  @@index([ownerId, name])
+}
+
+model Loan {
+  id                    String           @id @default(cuid())
+  customerId            String
+  customer              Customer         @relation(fields: [customerId], references: [id])
+  type                  LoanType
+  frequency             LoanFrequency?   @default(WEEKLY)
+  principalAmount       Decimal          @db.Decimal(15, 2)
+  principalBalance      Decimal          @db.Decimal(15, 2)
+  releasedAmount        Decimal          @db.Decimal(15, 2)
+  totalContracted       Decimal          @db.Decimal(15, 2)
+  installmentCount      Int?
+  installmentAmount     Decimal?         @db.Decimal(15, 2)
+  monthlyInterestRate   Decimal?         @db.Decimal(7, 4)
+  monthlyInterestAmount Decimal?         @db.Decimal(15, 2)
+  lateFeePerDay         Decimal          @default(0) @db.Decimal(15, 2)
+  loanDate              DateTime
+  firstDueDate          DateTime?
+  monthlyDueDay         Int?
+  status                LoanStatus       @default(ACTIVE)
+  previousLoanId        String?          @unique
+  previousLoan          Loan?            @relation("LoanRenewals", fields: [previousLoanId], references: [id])
+  renewedLoan           Loan?            @relation("LoanRenewals")
+  previousBalance       Decimal?         @db.Decimal(15, 2)
+  renewalEntryAmount    Decimal?         @db.Decimal(15, 2)
+  newMoneyReleased      Decimal?         @db.Decimal(15, 2)
+  refinancedAmount      Decimal?         @db.Decimal(15, 2)
+  installments          Installment[]
+  monthlyCharges        MonthlyCharge[]
+  payments              Payment[]
+  cashTransactions      CashTransaction[]
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([customerId, status])
+  @@index([status, type])
+  @@index([loanDate])
+}
+
+model Installment {
+  id         String       @id @default(cuid())
+  loanId     String
+  loan       Loan         @relation(fields: [loanId], references: [id])
+  number     Int
+  dueDate    DateTime
+  amount     Decimal      @db.Decimal(15, 2)
+  status     ChargeStatus @default(PENDING)
+  paidAmount Decimal      @default(0) @db.Decimal(15, 2)
+  paidAt     DateTime?
+  payments   Payment[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([loanId, number])
+  @@index([dueDate, status])
+}
+
+model MonthlyCharge {
+  id             String       @id @default(cuid())
+  loanId         String
+  loan           Loan         @relation(fields: [loanId], references: [id])
+  referenceMonth String
+  dueDate        DateTime
+  interestAmount Decimal      @db.Decimal(15, 2)
+  status         ChargeStatus @default(PENDING)
+  paidAmount     Decimal      @default(0) @db.Decimal(15, 2)
+  paidAt         DateTime?
+  payments       Payment[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([loanId, referenceMonth])
+  @@index([dueDate, status])
+}
+
+model Payment {
+  id              String          @id @default(cuid())
+  loanId          String
+  loan            Loan            @relation(fields: [loanId], references: [id])
+  installmentId   String?
+  installment     Installment?     @relation(fields: [installmentId], references: [id])
+  monthlyChargeId String?
+  monthlyCharge   MonthlyCharge?   @relation(fields: [monthlyChargeId], references: [id])
+  customerId      String
+  customer        Customer         @relation(fields: [customerId], references: [id])
+  type            PaymentType
+  amount          Decimal          @db.Decimal(15, 2)
+  lateFeeAmount   Decimal          @default(0) @db.Decimal(15, 2)
+  paymentDate     DateTime
+  paymentMethod   PaymentMethod
+  notes           String?          @db.Text
+  cashTransaction CashTransaction?
+  createdAt       DateTime         @default(now())
+
+  @@index([loanId, paymentDate])
+  @@index([customerId, paymentDate])
+}
+
+model CashTransaction {
+  id          String              @id @default(cuid())
+  ownerId     String?
+  owner       User?               @relation(fields: [ownerId], references: [id])
+  type        CashTransactionType
+  amount      Decimal             @db.Decimal(15, 2)
+  description String
+  loanId      String?
+  loan        Loan?               @relation(fields: [loanId], references: [id])
+  paymentId   String?             @unique
+  payment     Payment?            @relation(fields: [paymentId], references: [id])
+  createdAt   DateTime            @default(now())
+
+  @@index([createdAt, type])
+  @@index([ownerId, createdAt])
+  @@index([loanId])
+}

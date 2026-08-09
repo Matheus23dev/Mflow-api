@@ -1,0 +1,298 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { LoanFrequency, LoanStatus, LoanType, Prisma } from '@prisma/client';
+import {
+  addFrequency,
+  asUtcDate,
+  monthlyDueDate,
+  overdueDays,
+  referenceMonth,
+} from '../common/date.utils';
+import { money, numberOf } from '../common/money.utils';
+import { PortfolioStatusService } from '../common/portfolio-status.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateLoanDto } from './dto/create-loan.dto';
+import { UpdateLoanDto } from './dto/update-loan.dto';
+
+const loanInclude = {
+  customer: {
+    select: { id: true, name: true, phone: true, cpf: true, address: true },
+  },
+  installments: { orderBy: { number: 'asc' as const } },
+  monthlyCharges: { orderBy: { dueDate: 'asc' as const } },
+  payments: { orderBy: { paymentDate: 'desc' as const } },
+  previousLoan: { select: { id: true } },
+  renewedLoan: { select: { id: true } },
+};
+
+type LoanWithDetails = Prisma.LoanGetPayload<{ include: typeof loanInclude }>;
+
+@Injectable()
+export class LoansService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly portfolioStatus: PortfolioStatusService,
+  ) {}
+
+  async list(ownerId: string, status?: LoanStatus, type?: LoanType) {
+    await this.portfolioStatus.refresh(ownerId);
+    const loans = await this.prisma.loan.findMany({
+      where: {
+        customer: { ownerId },
+        ...(status ? { status } : {}),
+        ...(type ? { type } : {}),
+      },
+      include: loanInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+    return loans.map((loan) => this.withSummary(loan));
+  }
+
+  async findOne(ownerId: string, id: string) {
+    await this.portfolioStatus.refresh(ownerId);
+    const loan = await this.prisma.loan.findFirst({
+      where: { id, customer: { ownerId } },
+      include: loanInclude,
+    });
+    if (!loan) throw new NotFoundException('Empréstimo não encontrado.');
+    return this.withSummary(loan);
+  }
+
+  async create(ownerId: string, dto: CreateLoanDto) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { id: dto.customerId, ownerId },
+    });
+    if (!customer) throw new NotFoundException('Cliente não encontrado.');
+    this.validate(dto);
+
+    return this.prisma
+      .$transaction(async (tx) => {
+        const principal = money(dto.principalAmount);
+        const released = principal;
+        const isWeekly = dto.type === LoanType.WEEKLY;
+        const interestAmount = isWeekly
+          ? null
+          : money(
+              dto.monthlyInterestAmount ??
+                principal.mul(dto.monthlyInterestRate!).div(100),
+            );
+        const totalContracted = isWeekly
+          ? money(dto.installmentAmount!).mul(dto.installmentCount!)
+          : principal;
+        const loanDate = asUtcDate(dto.loanDate);
+        const firstDueDate = isWeekly
+          ? asUtcDate(dto.firstDueDate!)
+          : monthlyDueDate(loanDate, dto.monthlyDueDay!);
+
+        const loan = await tx.loan.create({
+          data: {
+            customerId: dto.customerId,
+            type: dto.type,
+            frequency: isWeekly
+              ? dto.frequency || LoanFrequency.WEEKLY
+              : LoanFrequency.MONTHLY,
+            principalAmount: principal,
+            principalBalance: principal,
+            releasedAmount: released,
+            totalContracted,
+            installmentCount: isWeekly ? dto.installmentCount : null,
+            installmentAmount: isWeekly ? money(dto.installmentAmount!) : null,
+            monthlyInterestRate: dto.monthlyInterestRate
+              ? money(dto.monthlyInterestRate)
+              : null,
+            monthlyInterestAmount: interestAmount,
+            lateFeePerDay: money(dto.lateFeePerDay),
+            loanDate,
+            firstDueDate,
+            monthlyDueDay: isWeekly ? null : dto.monthlyDueDay,
+          },
+        });
+
+        if (isWeekly) {
+          await tx.installment.createMany({
+            data: Array.from({ length: dto.installmentCount! }, (_, index) => ({
+              loanId: loan.id,
+              number: index + 1,
+              dueDate: addFrequency(
+                firstDueDate,
+                dto.frequency || LoanFrequency.WEEKLY,
+                index,
+              ),
+              amount: money(dto.installmentAmount!),
+            })),
+          });
+        } else {
+          await tx.monthlyCharge.create({
+            data: {
+              loanId: loan.id,
+              referenceMonth: referenceMonth(firstDueDate),
+              dueDate: firstDueDate,
+              interestAmount: interestAmount!,
+            },
+          });
+        }
+
+        await tx.cashTransaction.create({
+          data: {
+            ownerId,
+            type: 'EXPENSE',
+            amount: released,
+            description: `Liberação de empréstimo para ${customer.name}`,
+            loanId: loan.id,
+            createdAt: loanDate,
+          },
+        });
+        return tx.loan.findUniqueOrThrow({
+          where: { id: loan.id },
+          include: loanInclude,
+        });
+      })
+      .then((loan) => this.withSummary(loan));
+  }
+
+  async update(ownerId: string, id: string, dto: UpdateLoanDto) {
+    const loan = await this.ensureOwner(ownerId, id);
+    if (!['ACTIVE', 'OVERDUE'].includes(loan.status)) {
+      throw new BadRequestException(
+        'Somente contratos em andamento podem ser editados.',
+      );
+    }
+    if (dto.firstDueDate && loan.type === 'WEEKLY') {
+      const firstDue = asUtcDate(dto.firstDueDate);
+      await this.prisma.$transaction(async (tx) => {
+        const installments = await tx.installment.findMany({
+          where: { loanId: id },
+          orderBy: { number: 'asc' },
+        });
+        if (installments.some((item) => numberOf(item.paidAmount) > 0)) {
+          throw new BadRequestException(
+            'Não é possível alterar vencimentos após iniciar os pagamentos.',
+          );
+        }
+        for (const item of installments) {
+          await tx.installment.update({
+            where: { id: item.id },
+            data: {
+              dueDate: addFrequency(firstDue, loan.frequency!, item.number - 1),
+            },
+          });
+        }
+        await tx.loan.update({
+          where: { id },
+          data: { firstDueDate: firstDue, lateFeePerDay: dto.lateFeePerDay },
+        });
+      });
+    } else {
+      await this.prisma.loan.update({
+        where: { id },
+        data: { lateFeePerDay: dto.lateFeePerDay },
+      });
+    }
+    return this.findOne(ownerId, id);
+  }
+
+  async cancel(ownerId: string, id: string) {
+    const loan = await this.ensureOwner(ownerId, id);
+    if (loan.status === 'PAID' || loan.status === 'RENEWED') {
+      throw new BadRequestException('Este contrato não pode ser cancelado.');
+    }
+    await this.prisma.loan.update({
+      where: { id },
+      data: { status: 'CANCELLED' },
+    });
+    return { success: true };
+  }
+
+  private validate(dto: CreateLoanDto) {
+    if (
+      dto.type === LoanType.WEEKLY &&
+      (!dto.installmentCount || !dto.installmentAmount || !dto.firstDueDate)
+    ) {
+      throw new BadRequestException(
+        'Informe quantidade, valor e primeiro vencimento das parcelas.',
+      );
+    }
+    if (
+      dto.type === LoanType.MONTHLY_INTEREST &&
+      (!dto.monthlyDueDay ||
+        (!dto.monthlyInterestAmount && !dto.monthlyInterestRate))
+    ) {
+      throw new BadRequestException(
+        'Informe vencimento e taxa ou valor de juros mensal.',
+      );
+    }
+    if (dto.monthlyInterestAmount && dto.monthlyInterestRate) {
+      throw new BadRequestException(
+        'Informe a taxa ou o valor mensal, não ambos.',
+      );
+    }
+    const principal = money(dto.principalAmount);
+    if (
+      dto.type === LoanType.WEEKLY &&
+      money(dto.installmentAmount!)
+        .mul(dto.installmentCount!)
+        .lessThan(principal)
+    ) {
+      throw new BadRequestException(
+        'O total das parcelas não pode ser menor que o valor principal.',
+      );
+    }
+    if (
+      dto.firstDueDate &&
+      asUtcDate(dto.firstDueDate) < asUtcDate(dto.loanDate)
+    ) {
+      throw new BadRequestException(
+        'O primeiro vencimento não pode ser anterior ao empréstimo.',
+      );
+    }
+  }
+
+  private async ensureOwner(ownerId: string, id: string) {
+    const loan = await this.prisma.loan.findFirst({
+      where: { id, customer: { ownerId } },
+    });
+    if (!loan) throw new NotFoundException('Empréstimo não encontrado.');
+    return loan;
+  }
+
+  private withSummary(loan: LoanWithDetails) {
+    const chargeItems =
+      loan.type === 'WEEKLY' ? loan.installments : loan.monthlyCharges;
+    const received = loan.payments.reduce(
+      (sum, payment) => sum + numberOf(payment.amount),
+      0,
+    );
+    const openCharges = chargeItems.reduce(
+      (sum, charge) =>
+        sum +
+        numberOf('amount' in charge ? charge.amount : charge.interestAmount) -
+        numberOf(charge.paidAmount),
+      0,
+    );
+    const next = chargeItems.find((item) => item.status !== 'PAID');
+    const overdue = chargeItems.filter((item) => item.status === 'OVERDUE');
+    const lateFees = overdue.reduce(
+      (sum, item) =>
+        sum + overdueDays(item.dueDate) * numberOf(loan.lateFeePerDay),
+      0,
+    );
+    return {
+      ...loan,
+      summary: {
+        received,
+        openBalance:
+          loan.type === 'WEEKLY'
+            ? openCharges
+            : numberOf(loan.principalBalance) + openCharges,
+        paidCount: chargeItems.filter((item) => item.status === 'PAID').length,
+        totalCount: chargeItems.length,
+        nextDue: next?.dueDate || null,
+        overdueCount: overdue.length,
+        lateFees,
+      },
+    };
+  }
+}

@@ -1,0 +1,51 @@
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import { PrismaClient } from '@prisma/client';
+
+function databaseConfig() {
+  const value = process.env.DATABASE_URL;
+  if (!value) throw new Error('DATABASE_URL não foi configurada.');
+  const url = new URL(value);
+  const isAiven = url.hostname.endsWith('.aivencloud.com');
+  const isTiDb = url.hostname.endsWith('.tidbcloud.com');
+  const databaseCa = process.env.DATABASE_CA?.replace(/\\n/g, '\n').trim();
+  if (isAiven && !databaseCa) {
+    throw new Error(
+      'DATABASE_CA não foi configurada com o certificado CA do Aiven.',
+    );
+  }
+  return {
+    host: url.hostname,
+    port: Number(url.port || 3306),
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.replace(/^\//, ''),
+    connectionLimit: 10,
+    ...(isAiven || isTiDb
+      ? {
+          ssl: {
+            rejectUnauthorized: true,
+            ...(databaseCa ? { ca: databaseCa } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+@Injectable()
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
+  constructor() {
+    super({ adapter: new PrismaMariaDb(databaseConfig()) });
+  }
+
+  async onModuleInit() {
+    await this.$connect();
+  }
+
+  async onModuleDestroy() {
+    await this.$disconnect();
+  }
+}

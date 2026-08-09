@@ -1,0 +1,2 @@
+ALTER TABLE `Payment`
+    ADD COLUMN `lateFeeAmount` DECIMAL(15, 2) NOT NULL DEFAULT 0;

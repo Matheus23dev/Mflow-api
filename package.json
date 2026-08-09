@@ -12,7 +12,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main.js",
     "start:deploy": "node scripts/start-deploy.mjs",
     "db:create": "ts-node prisma/create-database.ts",
     "db:deploy": "prisma migrate deploy",

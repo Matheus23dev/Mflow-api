@@ -1,6 +1,8 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient } from '@prisma/client';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 function databaseConfig() {
   const value = process.env.DATABASE_URL;
@@ -8,7 +10,12 @@ function databaseConfig() {
   const url = new URL(value);
   const isAiven = url.hostname.endsWith('.aivencloud.com');
   const isTiDb = url.hostname.endsWith('.tidbcloud.com');
-  const databaseCa = process.env.DATABASE_CA?.replace(/\\n/g, '\n').trim();
+  const localCaPath = join(process.cwd(), 'prisma', 'aiven-ca.pem');
+  const databaseCa =
+    process.env.DATABASE_CA?.replace(/\\n/g, '\n').trim() ||
+    (isAiven && existsSync(localCaPath)
+      ? readFileSync(localCaPath, 'utf8').trim()
+      : undefined);
   if (isAiven && !databaseCa) {
     throw new Error(
       'DATABASE_CA não foi configurada com o certificado CA do Aiven.',

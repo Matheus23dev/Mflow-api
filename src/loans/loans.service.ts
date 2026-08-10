@@ -242,11 +242,24 @@ export class LoansService {
         );
         const totalContracted = paidTotal.add(remainingTotal);
 
+        const capitalRatio = totalContracted.greaterThan(0)
+          ? principalAmount.div(totalContracted)
+          : money(1);
+        const recoveredCapital = paidTotal.mul(capitalRatio);
+        const calculatedPrincipalBalance = Prisma.Decimal.max(
+          money(0),
+          principalAmount.sub(recoveredCapital),
+        );
+        const finalPrincipalBalance =
+          dto.principalBalance !== undefined
+            ? money(dto.principalBalance)
+            : calculatedPrincipalBalance;
+
         await tx.loan.update({
           where: { id },
           data: {
             principalAmount,
-            principalBalance,
+            principalBalance: finalPrincipalBalance,
             firstDueDate: firstDue,
             frequency,
             installmentCount,

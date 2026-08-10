@@ -160,37 +160,144 @@ export class LoansService {
         'Somente contratos em andamento podem ser editados.',
       );
     }
-    if (dto.firstDueDate && loan.type === 'WEEKLY') {
-      const firstDue = asUtcDate(dto.firstDueDate);
+
+    const principalAmount = dto.principalAmount
+      ? money(dto.principalAmount)
+      : loan.principalAmount;
+    const principalBalance =
+      dto.principalBalance !== undefined
+        ? money(dto.principalBalance)
+        : dto.principalAmount !== undefined
+          ? money(dto.principalAmount)
+          : loan.principalBalance;
+
+    if (loan.type === LoanType.WEEKLY) {
+      const firstDue = dto.firstDueDate
+        ? asUtcDate(dto.firstDueDate)
+        : loan.firstDueDate!;
+      const frequency = dto.frequency || loan.frequency || LoanFrequency.WEEKLY;
+      const installmentCount = dto.installmentCount ?? loan.installmentCount!;
+      const installmentAmount = dto.installmentAmount
+        ? money(dto.installmentAmount)
+        : loan.installmentAmount!;
+
+      if (firstDue < loan.loanDate) {
+        throw new BadRequestException(
+          'O primeiro vencimento não pode ser anterior ao empréstimo.',
+        );
+      }
+
+      const existingInstallments = await this.prisma.installment.findMany({
+        where: { loanId: id },
+        orderBy: { number: 'asc' },
+      });
+
+      const paidInstallments = existingInstallments.filter(
+        (inst) => inst.status === 'PAID' || numberOf(inst.paidAmount) > 0,
+      );
+
+      if (installmentCount < paidInstallments.length) {
+        throw new BadRequestException(
+          `Não é possível definir quantidade de parcelas menor que o número de parcelas já pagas (${paidInstallments.length}).`,
+        );
+      }
+
       await this.prisma.$transaction(async (tx) => {
-        const installments = await tx.installment.findMany({
-          where: { loanId: id },
-          orderBy: { number: 'asc' },
+        await tx.installment.deleteMany({
+          where: {
+            loanId: id,
+            status: { not: 'PAID' },
+            paidAmount: 0,
+          },
         });
-        if (installments.some((item) => numberOf(item.paidAmount) > 0)) {
-          throw new BadRequestException(
-            'Não é possível alterar vencimentos após iniciar os pagamentos.',
-          );
-        }
-        for (const item of installments) {
-          await tx.installment.update({
-            where: { id: item.id },
-            data: {
-              dueDate: addFrequency(firstDue, loan.frequency!, item.number - 1),
-            },
+
+        const startNumber = paidInstallments.length + 1;
+        const newInstallmentsData: Array<{
+          loanId: string;
+          number: number;
+          dueDate: Date;
+          amount: Prisma.Decimal;
+        }> = [];
+        for (let i = startNumber; i <= installmentCount; i++) {
+          newInstallmentsData.push({
+            loanId: id,
+            number: i,
+            dueDate: addFrequency(firstDue, frequency, i - 1),
+            amount: installmentAmount,
           });
         }
+
+        if (newInstallmentsData.length > 0) {
+          await tx.installment.createMany({
+            data: newInstallmentsData,
+          });
+        }
+
+        const paidTotal = paidInstallments.reduce(
+          (sum, inst) => sum.add(inst.paidAmount),
+          money(0),
+        );
+        const remainingTotal = installmentAmount.mul(
+          installmentCount - paidInstallments.length,
+        );
+        const totalContracted = paidTotal.add(remainingTotal);
+
         await tx.loan.update({
           where: { id },
-          data: { firstDueDate: firstDue, lateFeePerDay: dto.lateFeePerDay },
+          data: {
+            principalAmount,
+            principalBalance,
+            firstDueDate: firstDue,
+            frequency,
+            installmentCount,
+            installmentAmount,
+            totalContracted,
+            lateFeePerDay: dto.lateFeePerDay ?? loan.lateFeePerDay,
+          },
         });
       });
-    } else {
-      await this.prisma.loan.update({
-        where: { id },
-        data: { lateFeePerDay: dto.lateFeePerDay },
+    } else if (loan.type === LoanType.MONTHLY_INTEREST) {
+      if (dto.monthlyInterestRate && dto.monthlyInterestAmount) {
+        throw new BadRequestException(
+          'Informe a taxa ou o valor mensal, não ambos.',
+        );
+      }
+
+      const monthlyDueDay = dto.monthlyDueDay ?? loan.monthlyDueDay!;
+      const interestAmount = dto.monthlyInterestAmount
+        ? money(dto.monthlyInterestAmount)
+        : dto.monthlyInterestRate
+          ? principalAmount.mul(dto.monthlyInterestRate).div(100)
+          : loan.monthlyInterestAmount!;
+      const dueDate = monthlyDueDate(loan.loanDate, monthlyDueDay);
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.monthlyCharge.updateMany({
+          where: { loanId: id, status: { in: ['PENDING', 'OVERDUE'] } },
+          data: {
+            dueDate,
+            referenceMonth: referenceMonth(dueDate),
+            interestAmount,
+          },
+        });
+
+        await tx.loan.update({
+          where: { id },
+          data: {
+            principalAmount,
+            principalBalance,
+            firstDueDate: dueDate,
+            monthlyDueDay,
+            monthlyInterestRate: dto.monthlyInterestAmount
+              ? null
+              : (dto.monthlyInterestRate ?? loan.monthlyInterestRate),
+            monthlyInterestAmount: interestAmount,
+            lateFeePerDay: dto.lateFeePerDay ?? loan.lateFeePerDay,
+          },
+        });
       });
     }
+
     return this.findOne(ownerId, id);
   }
 

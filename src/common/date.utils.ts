@@ -36,12 +36,18 @@ export function addFrequency(
   amount = 1,
 ) {
   const result = new Date(date);
-  if (frequency === 'WEEKLY')
+  if (frequency === 'WEEKLY') {
     result.setUTCDate(result.getUTCDate() + 7 * amount);
-  if (frequency === 'BIWEEKLY')
+  } else if (frequency === 'BIWEEKLY') {
     result.setUTCDate(result.getUTCDate() + 14 * amount);
-  if (frequency === 'MONTHLY')
-    result.setUTCMonth(result.getUTCMonth() + amount);
+  } else if (frequency === 'MONTHLY') {
+    const originalDay = date.getUTCDate();
+    result.setUTCMonth(result.getUTCMonth() + amount, 1);
+    const daysInMonth = new Date(
+      Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0, 12),
+    ).getUTCDate();
+    result.setUTCDate(Math.min(originalDay, daysInMonth));
+  }
   return result;
 }
 

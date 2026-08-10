@@ -206,12 +206,16 @@ export class LoansService {
         await tx.installment.deleteMany({
           where: {
             loanId: id,
-            status: { not: 'PAID' },
             paidAmount: 0,
+            status: { not: 'PAID' },
           },
         });
 
-        const startNumber = paidInstallments.length + 1;
+        const paidNumbers = paidInstallments.map((inst) => inst.number);
+        const maxPaidNumber =
+          paidNumbers.length > 0 ? Math.max(...paidNumbers) : 0;
+        const startNumber = maxPaidNumber + 1;
+
         const newInstallmentsData: Array<{
           loanId: string;
           number: number;

@@ -267,7 +267,7 @@ export class LoansService {
       const interestAmount = dto.monthlyInterestAmount
         ? money(dto.monthlyInterestAmount)
         : dto.monthlyInterestRate
-          ? principalAmount.mul(dto.monthlyInterestRate).div(100)
+          ? principalBalance.mul(dto.monthlyInterestRate).div(100)
           : loan.monthlyInterestAmount!;
       const dueDate = monthlyDueDate(loan.loanDate, monthlyDueDay);
 

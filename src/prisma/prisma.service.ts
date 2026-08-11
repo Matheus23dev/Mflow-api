@@ -27,7 +27,10 @@ function databaseConfig() {
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     database: url.pathname.replace(/^\//, ''),
-    connectionLimit: 10,
+    // O Aiven pode levar mais de 1 segundo para concluir a primeira conexão
+    // TLS. O padrão do driver é curto demais e fazia os logins falharem.
+    connectionLimit: 5,
+    connectTimeout: 15_000,
     ...(isAiven || isTiDb
       ? {
           ssl: {

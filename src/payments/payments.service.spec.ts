@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PortfolioStatusService } from '../common/portfolio-status.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReceiptsService } from '../receipts/receipts.service';
 import { PaymentsService } from './payments.service';
 
 type PaymentParts = {
@@ -14,6 +15,7 @@ describe('PaymentsService', () => {
   const service = new PaymentsService(
     {} as PrismaService,
     {} as PortfolioStatusService,
+    {} as ReceiptsService,
   );
   const parts = (payment: number, outstanding: number, fee: number) =>
     (

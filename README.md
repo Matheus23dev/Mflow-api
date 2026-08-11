@@ -4,11 +4,33 @@ API NestJS com autenticação JWT, Prisma e MySQL para a operação financeira d
 
 ## Configuração
 
-O arquivo `.env` contém somente as duas variáveis necessárias:
+O arquivo `.env` contém as variáveis principais da aplicação:
 
 ```dotenv
 DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/mflow"
 JWT_SECRET="substitua-por-um-segredo-forte"
+```
+
+## Comprovantes privados
+
+Crie um bucket **Standard**, privado e exclusivo para o MFlow no Cloudflare R2. Gere uma credencial limitada a leitura e gravação nesse bucket e acrescente ao `.env`:
+
+```dotenv
+R2_ACCOUNT_ID="seu-account-id"
+R2_ACCESS_KEY_ID="sua-access-key"
+R2_SECRET_ACCESS_KEY="sua-secret-key"
+R2_BUCKET_NAME="mflow-comprovantes"
+DISCORD_RECEIPTS_WEBHOOK_URL=""
+```
+
+O webhook do Discord é opcional e recebe somente alertas de espaço, nunca comprovantes ou dados do cliente. O sistema alerta em 8 GB, entra em nível crítico em 8,5 GB e bloqueia novos arquivos em 9 GB. Esse teto não pode ser configurado acima de 9 GB, preservando margem antes da franquia de 10 GB. Use um bucket dedicado e não envie arquivos manualmente para que o controle permaneça completo.
+
+Imagens são convertidas para WebP sem metadados e limitadas a 1,5 MB após a compactação. PDFs são aceitos até 3 MB. Os comprovantes são privados e apagados quando o empréstimo deixa de estar ativo.
+
+Em uma instalação existente, aplique a nova tabela antes de publicar a versão:
+
+```bash
+npm run db:deploy
 ```
 
 Depois de informar a URL real, crie o banco, aplique as migrações e configure o acesso inicial:

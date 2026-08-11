@@ -3,15 +3,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { LoanFrequency, Prisma } from '@prisma/client';
+import { LoanFrequency } from '@prisma/client';
 import { addFrequency, asUtcDate } from '../common/date.utils';
 import { money } from '../common/money.utils';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReceiptsService } from '../receipts/receipts.service';
 import { CreateRenewalDto } from './dto/create-renewal.dto';
 
 @Injectable()
 export class RenewalsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly receipts: ReceiptsService,
+  ) {}
 
   list(ownerId: string) {
     return this.prisma.loan.findMany({
@@ -27,7 +31,7 @@ export class RenewalsService {
   async create(ownerId: string, previousLoanId: string, dto: CreateRenewalDto) {
     const oldLoan = await this.prisma.loan.findFirst({
       where: { id: previousLoanId, customer: { ownerId } },
-      include: { customer: true, installments: true },
+      include: { customer: true },
     });
     if (!oldLoan) throw new NotFoundException('Empréstimo não encontrado.');
     if (
@@ -38,10 +42,7 @@ export class RenewalsService {
         'Somente empréstimos semanais em andamento podem ser renovados.',
       );
     }
-    const previousBalance = oldLoan.installments.reduce(
-      (sum, item) => sum.add(item.amount.sub(item.paidAmount)),
-      new Prisma.Decimal(0),
-    );
+    const previousBalance = oldLoan.principalBalance;
     const entry = money(dto.entryAmount);
     if (entry.greaterThan(previousBalance))
       throw new BadRequestException('A entrada supera o saldo anterior.');
@@ -67,7 +68,7 @@ export class RenewalsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const renewedLoan = await this.prisma.$transaction(async (tx) => {
       if (entry.greaterThan(0)) {
         const payment = await tx.payment.create({
           data: {
@@ -148,5 +149,7 @@ export class RenewalsService {
         include: { installments: true, customer: true },
       });
     });
+    await this.receipts.purgeLoan(ownerId, oldLoan.id, true);
+    return renewedLoan;
   }
 }

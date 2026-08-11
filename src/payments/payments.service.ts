@@ -14,6 +14,7 @@ import {
 import { money } from '../common/money.utils';
 import { PortfolioStatusService } from '../common/portfolio-status.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReceiptsService } from '../receipts/receipts.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly portfolioStatus: PortfolioStatusService,
+    private readonly receipts: ReceiptsService,
   ) {}
 
   list(ownerId: string, loanId?: string, customerId?: string) {
@@ -50,7 +52,7 @@ export class PaymentsService {
 
     await this.portfolioStatus.refresh(ownerId);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const loan = await tx.loan.findFirst({
         where: { id: dto.loanId, customer: { ownerId } },
         include: { customer: true },
@@ -303,8 +305,17 @@ export class PaymentsService {
         },
       });
 
-      return payment;
+      const currentLoan = await tx.loan.findUniqueOrThrow({
+        where: { id: loan.id },
+        select: { status: true },
+      });
+      return { ...payment, loanStatus: currentLoan.status };
     });
+
+    if (!['ACTIVE', 'OVERDUE'].includes(result.loanStatus)) {
+      await this.receipts.purgeLoan(ownerId, dto.loanId, true);
+    }
+    return result;
   }
 
   private paymentParts(

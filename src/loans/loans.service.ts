@@ -14,6 +14,7 @@ import {
 import { money, numberOf } from '../common/money.utils';
 import { PortfolioStatusService } from '../common/portfolio-status.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReceiptsService } from '../receipts/receipts.service';
 import { CreateLoanDto } from './dto/create-loan.dto';
 import { UpdateLoanDto } from './dto/update-loan.dto';
 
@@ -26,6 +27,19 @@ const loanInclude = {
   payments: { orderBy: { paymentDate: 'desc' as const } },
   previousLoan: { select: { id: true } },
   renewedLoan: { select: { id: true } },
+  receipts: {
+    select: {
+      id: true,
+      loanId: true,
+      paymentId: true,
+      kind: true,
+      originalName: true,
+      mimeType: true,
+      sizeBytes: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' as const },
+  },
 };
 
 type LoanWithDetails = Prisma.LoanGetPayload<{ include: typeof loanInclude }>;
@@ -35,6 +49,7 @@ export class LoansService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly portfolioStatus: PortfolioStatusService,
+    private readonly receipts: ReceiptsService,
   ) {}
 
   async list(ownerId: string, status?: LoanStatus, type?: LoanType) {
@@ -327,11 +342,13 @@ export class LoansService {
       where: { id },
       data: { status: 'CANCELLED' },
     });
+    await this.receipts.purgeLoan(ownerId, id, true);
     return { success: true };
   }
 
   async remove(ownerId: string, id: string) {
     await this.ensureOwner(ownerId, id);
+    await this.receipts.purgeLoan(ownerId, id);
 
     await this.prisma.$transaction(async (tx) => {
       const paymentIds = (
@@ -437,6 +454,9 @@ export class LoansService {
     );
     return {
       ...loan,
+      receipts: ['ACTIVE', 'OVERDUE'].includes(loan.status)
+        ? loan.receipts
+        : [],
       summary: {
         received,
         openBalance:

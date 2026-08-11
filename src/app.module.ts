@@ -12,6 +12,7 @@ import { LoansModule } from './loans/loans.module';
 import { MonthlyChargesModule } from './monthly-charges/monthly-charges.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ReceiptsModule } from './receipts/receipts.module';
 import { RenewalsModule } from './renewals/renewals.module';
 import { ReportsModule } from './reports/reports.module';
 import { UsersModule } from './users/users.module';
@@ -31,6 +32,7 @@ import { UsersModule } from './users/users.module';
     CashModule,
     DashboardModule,
     ReportsModule,
+    ReceiptsModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],

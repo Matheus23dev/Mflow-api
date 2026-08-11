@@ -16,3 +16,19 @@ services:
         generateValue: true
       - key: FRONTEND_URL
         sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: DISCORD_RECEIPTS_WEBHOOK_URL
+        sync: false
+      - key: RECEIPTS_WARNING_BYTES
+        value: "8000000000"
+      - key: RECEIPTS_CRITICAL_BYTES
+        value: "8500000000"
+      - key: RECEIPTS_HARD_LIMIT_BYTES
+        value: "9000000000"

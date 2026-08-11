@@ -57,16 +57,23 @@ enum CashTransactionType {
   EXPENSE
 }
 
+enum ReceiptKind {
+  LOAN_DISBURSEMENT
+  PAYMENT
+  RENEWAL
+}
+
 model User {
-  id           String     @id @default(cuid())
-  name         String
-  email        String     @unique
-  passwordHash String
-  role         UserRole   @default(ADMIN)
-  customers    Customer[]
+  id               String            @id @default(cuid())
+  name             String
+  email            String            @unique
+  passwordHash     String
+  role             UserRole          @default(ADMIN)
+  customers        Customer[]
   cashTransactions CashTransaction[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  receipts         Receipt[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 model Customer {
@@ -88,37 +95,38 @@ model Customer {
 }
 
 model Loan {
-  id                    String           @id @default(cuid())
+  id                    String            @id @default(cuid())
   customerId            String
-  customer              Customer         @relation(fields: [customerId], references: [id])
+  customer              Customer          @relation(fields: [customerId], references: [id])
   type                  LoanType
-  frequency             LoanFrequency?   @default(WEEKLY)
-  principalAmount       Decimal          @db.Decimal(15, 2)
-  principalBalance      Decimal          @db.Decimal(15, 2)
-  releasedAmount        Decimal          @db.Decimal(15, 2)
-  totalContracted       Decimal          @db.Decimal(15, 2)
+  frequency             LoanFrequency?    @default(WEEKLY)
+  principalAmount       Decimal           @db.Decimal(15, 2)
+  principalBalance      Decimal           @db.Decimal(15, 2)
+  releasedAmount        Decimal           @db.Decimal(15, 2)
+  totalContracted       Decimal           @db.Decimal(15, 2)
   installmentCount      Int?
-  installmentAmount     Decimal?         @db.Decimal(15, 2)
-  monthlyInterestRate   Decimal?         @db.Decimal(7, 4)
-  monthlyInterestAmount Decimal?         @db.Decimal(15, 2)
-  lateFeePerDay         Decimal          @default(0) @db.Decimal(15, 2)
+  installmentAmount     Decimal?          @db.Decimal(15, 2)
+  monthlyInterestRate   Decimal?          @db.Decimal(7, 4)
+  monthlyInterestAmount Decimal?          @db.Decimal(15, 2)
+  lateFeePerDay         Decimal           @default(0) @db.Decimal(15, 2)
   loanDate              DateTime
   firstDueDate          DateTime?
   monthlyDueDay         Int?
-  status                LoanStatus       @default(ACTIVE)
-  previousLoanId        String?          @unique
-  previousLoan          Loan?            @relation("LoanRenewals", fields: [previousLoanId], references: [id])
-  renewedLoan           Loan?            @relation("LoanRenewals")
-  previousBalance       Decimal?         @db.Decimal(15, 2)
-  renewalEntryAmount    Decimal?         @db.Decimal(15, 2)
-  newMoneyReleased      Decimal?         @db.Decimal(15, 2)
-  refinancedAmount      Decimal?         @db.Decimal(15, 2)
+  status                LoanStatus        @default(ACTIVE)
+  previousLoanId        String?           @unique
+  previousLoan          Loan?             @relation("LoanRenewals", fields: [previousLoanId], references: [id])
+  renewedLoan           Loan?             @relation("LoanRenewals")
+  previousBalance       Decimal?          @db.Decimal(15, 2)
+  renewalEntryAmount    Decimal?          @db.Decimal(15, 2)
+  newMoneyReleased      Decimal?          @db.Decimal(15, 2)
+  refinancedAmount      Decimal?          @db.Decimal(15, 2)
   installments          Installment[]
   monthlyCharges        MonthlyCharge[]
   payments              Payment[]
   cashTransactions      CashTransaction[]
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
+  receipts              Receipt[]
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
   @@index([customerId, status])
   @@index([status, type])
@@ -162,9 +170,9 @@ model MonthlyCharge {
 }
 
 model Payment {
-  id              String          @id @default(cuid())
+  id              String           @id @default(cuid())
   loanId          String
-  loan            Loan            @relation(fields: [loanId], references: [id])
+  loan            Loan             @relation(fields: [loanId], references: [id])
   installmentId   String?
   installment     Installment?     @relation(fields: [installmentId], references: [id])
   monthlyChargeId String?
@@ -178,10 +186,39 @@ model Payment {
   paymentMethod   PaymentMethod
   notes           String?          @db.Text
   cashTransaction CashTransaction?
+  receipts        Receipt[]
   createdAt       DateTime         @default(now())
 
   @@index([loanId, paymentDate])
   @@index([customerId, paymentDate])
+}
+
+model Receipt {
+  id           String      @id @default(cuid())
+  ownerId      String
+  owner        User        @relation(fields: [ownerId], references: [id])
+  loanId       String
+  loan         Loan        @relation(fields: [loanId], references: [id])
+  paymentId    String?
+  payment      Payment?    @relation(fields: [paymentId], references: [id])
+  kind         ReceiptKind
+  objectKey    String      @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  checksum     String
+  createdAt    DateTime    @default(now())
+
+  @@index([ownerId, createdAt])
+  @@index([loanId, createdAt])
+  @@index([paymentId])
+}
+
+model ReceiptStorageState {
+  id             String    @id
+  lastAlertLevel String    @default("NORMAL")
+  lastAlertAt    DateTime?
+  updatedAt      DateTime  @updatedAt
 }
 
 model CashTransaction {

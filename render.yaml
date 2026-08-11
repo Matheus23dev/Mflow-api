@@ -10,8 +10,6 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
-      - key: DATABASE_CA
-        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_URL

@@ -1,15 +1,44 @@
 # MFlow API
 
-API NestJS com autenticação JWT, Prisma e MySQL para a operação financeira do MFlow.
+API NestJS com autenticação JWT, Prisma e PostgreSQL/Supabase para a operação financeira do MFlow.
 
 ## Configuração
 
 O arquivo `.env` contém as variáveis principais da aplicação:
 
 ```dotenv
-DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/mflow"
+DATABASE_URL="postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-sa-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
 JWT_SECRET="substitua-por-um-segredo-forte"
 ```
+
+No Render, use a URL **Session pooler** do Supabase, na porta `5432`. A senha precisa estar codificada para URL se tiver caracteres especiais. `DIRECT_URL` é opcional e pode receber a conexão direta para executar comandos Prisma em uma máquina com suporte a IPv6.
+
+Baixe o certificado em **Database → Settings → SSL Configuration** no Supabase e salve como `prisma/supabase-ca.crt`. A API usa esse certificado para validar a identidade do servidor PostgreSQL. Como alternativa no Render, configure o conteúdo completo em `SUPABASE_DATABASE_CA`.
+
+## Migrar do Aiven para o Supabase
+
+1. Crie o projeto no Supabase e copie a URL **Session pooler** exibida em **Connect**.
+2. Escolha um horário sem novos lançamentos e pause temporariamente a API no Render.
+3. No Git Bash, dentro da API, configure as conexões somente para a sessão atual:
+
+```bash
+export MYSQL_SOURCE_URL='mysql://USUARIO:SENHA@HOST_AIVEN:PORTA/defaultdb'
+export MYSQL_SOURCE_CA='-----BEGIN CERTIFICATE-----\nCERTIFICADO_CA_DO_AIVEN\n-----END CERTIFICATE-----'
+export POSTGRES_TARGET_URL='postgresql://postgres.PROJECT_REF:SENHA@HOST_POOLER:5432/postgres?sslmode=require'
+```
+
+4. Crie as tabelas no Supabase e copie os dados:
+
+```bash
+npm run db:deploy
+npm run db:migrate:from-mysql
+```
+
+O copiador exige que as tabelas do MFlow no Supabase estejam vazias, preserva os IDs e relacionamentos e confere a quantidade de registros de todas as tabelas. Usuários, clientes, empréstimos, parcelas, cobranças, pagamentos, caixa e referências dos comprovantes são transferidos. Os arquivos dos comprovantes continuam no Cloudflare R2 e não precisam ser enviados novamente.
+
+5. No Render, troque apenas `DATABASE_URL` pela URL **Session pooler** do Supabase, remova a antiga `DATABASE_CA` e faça um novo deploy. Só encerre o Aiven depois de entrar no sistema e conferir clientes, empréstimos, relatórios e comprovantes.
+
+Não execute `db:setup` antes da cópia, pois ele cria o usuário inicial e o destino deixará de estar vazio.
 
 ## Comprovantes privados
 
@@ -29,13 +58,13 @@ Imagens são convertidas para WebP sem metadados e limitadas a 1,5 MB após a co
 
 Novos arquivos são organizados no bucket por usuário, nome do cliente e contrato. Comprovantes de pagamento recebem nomes como `parcela-03--pix--2026-08-11--<id>.pdf`, facilitando a busca manual no painel do R2. Objetos antigos permanecem no caminho original e continuam acessíveis pelo sistema.
 
-Em uma instalação existente, aplique a nova tabela antes de publicar a versão:
+Em uma instalação PostgreSQL existente, aplique novas migrations antes de publicar a versão:
 
 ```bash
 npm run db:deploy
 ```
 
-Depois de informar a URL real, crie o banco, aplique as migrações e configure o acesso inicial:
+Em uma instalação nova e vazia, aplique as migrations e configure o acesso inicial:
 
 ```bash
 npm run db:setup

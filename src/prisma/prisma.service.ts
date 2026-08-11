@@ -1,43 +1,42 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 function databaseConfig() {
-  const value = process.env.DATABASE_URL;
+  const value = process.env.DATABASE_URL?.trim();
   if (!value) throw new Error('DATABASE_URL não foi configurada.');
+
   const url = new URL(value);
-  const isAiven = url.hostname.endsWith('.aivencloud.com');
-  const isTiDb = url.hostname.endsWith('.tidbcloud.com');
-  const localCaPath = join(process.cwd(), 'prisma', 'aiven-ca.pem');
-  const databaseCa =
-    process.env.DATABASE_CA?.replace(/\\n/g, '\n').trim() ||
-    (isAiven && existsSync(localCaPath)
-      ? readFileSync(localCaPath, 'utf8').trim()
-      : undefined);
-  if (isAiven && !databaseCa) {
+  if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') {
     throw new Error(
-      'DATABASE_CA não foi configurada com o certificado CA do Aiven.',
+      'DATABASE_URL deve usar uma conexão PostgreSQL do Supabase.',
     );
   }
+
+  const isSupabase = url.hostname.endsWith('.supabase.com');
+  const localCaPath = join(process.cwd(), 'prisma', 'supabase-ca.crt');
+  const databaseCa =
+    process.env.SUPABASE_DATABASE_CA?.replace(/\\n/g, '\n').trim() ||
+    (isSupabase && existsSync(localCaPath)
+      ? readFileSync(localCaPath, 'utf8').trim()
+      : undefined);
+
+  if (isSupabase && !databaseCa) {
+    throw new Error(
+      'Baixe o certificado SSL do Supabase em prisma/supabase-ca.crt.',
+    );
+  }
+
+  if (isSupabase) url.searchParams.delete('sslmode');
+
   return {
-    host: url.hostname,
-    port: Number(url.port || 3306),
-    user: decodeURIComponent(url.username),
-    password: decodeURIComponent(url.password),
-    database: url.pathname.replace(/^\//, ''),
-    // O Aiven pode levar mais de 1 segundo para concluir a primeira conexão
-    // TLS. O padrão do driver é curto demais e fazia os logins falharem.
-    connectionLimit: 5,
-    connectTimeout: 15_000,
-    ...(isAiven || isTiDb
-      ? {
-          ssl: {
-            rejectUnauthorized: true,
-            ...(databaseCa ? { ca: databaseCa } : {}),
-          },
-        }
+    connectionString: url.toString(),
+    max: 5,
+    connectionTimeoutMillis: 15_000,
+    ...(databaseCa
+      ? { ssl: { ca: databaseCa, rejectUnauthorized: true } }
       : {}),
   };
 }
@@ -48,7 +47,9 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   constructor() {
-    super({ adapter: new PrismaMariaDb(databaseConfig()) });
+    super({
+      adapter: new PrismaPg(databaseConfig()),
+    });
   }
 
   async onModuleInit() {

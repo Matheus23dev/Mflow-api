@@ -149,7 +149,7 @@ export class RenewalsService {
         include: { installments: true, customer: true },
       });
     });
-    await this.receipts.purgeLoan(ownerId, oldLoan.id, true);
+    await this.receipts.purgePaymentReceipts(ownerId, oldLoan.id, true);
     return renewedLoan;
   }
 }

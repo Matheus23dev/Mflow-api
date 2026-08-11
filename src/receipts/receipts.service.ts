@@ -185,8 +185,32 @@ export class ReceiptsService implements OnModuleInit {
   }
 
   async purgeLoan(ownerId: string, loanId: string, bestEffort = false) {
+    return this.purgeReceipts(
+      { ownerId, loanId },
+      bestEffort,
+      `do empréstimo ${loanId}`,
+    );
+  }
+
+  async purgePaymentReceipts(
+    ownerId: string,
+    loanId: string,
+    bestEffort = false,
+  ) {
+    return this.purgeReceipts(
+      { ownerId, loanId, kind: ReceiptKind.PAYMENT },
+      bestEffort,
+      `dos pagamentos do empréstimo ${loanId}`,
+    );
+  }
+
+  private async purgeReceipts(
+    where: Prisma.ReceiptWhereInput,
+    bestEffort: boolean,
+    label: string,
+  ) {
     const receipts = await this.prisma.receipt.findMany({
-      where: { ownerId, loanId },
+      where,
       select: { id: true, objectKey: true },
     });
     if (!receipts.length) return;
@@ -198,7 +222,7 @@ export class ReceiptsService implements OnModuleInit {
     } catch (error) {
       if (!bestEffort) throw error;
       this.logger.warn(
-        `A limpeza do empréstimo ${loanId} será tentada novamente: ${this.errorMessage(error)}`,
+        `A limpeza ${label} será tentada novamente: ${this.errorMessage(error)}`,
       );
     }
   }
@@ -207,13 +231,18 @@ export class ReceiptsService implements OnModuleInit {
     const receipts = await this.prisma.receipt.findMany({
       where: {
         ...(ownerId ? { ownerId } : {}),
+        kind: ReceiptKind.PAYMENT,
         loan: { status: { notIn: ['ACTIVE', 'OVERDUE'] } },
       },
       select: { ownerId: true, loanId: true },
       distinct: ['loanId'],
     });
     for (const receipt of receipts) {
-      await this.purgeLoan(receipt.ownerId, receipt.loanId, bestEffort);
+      await this.purgePaymentReceipts(
+        receipt.ownerId,
+        receipt.loanId,
+        bestEffort,
+      );
     }
   }
 

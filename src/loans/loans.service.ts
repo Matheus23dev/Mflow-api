@@ -342,7 +342,7 @@ export class LoansService {
       where: { id },
       data: { status: 'CANCELLED' },
     });
-    await this.receipts.purgeLoan(ownerId, id, true);
+    await this.receipts.purgePaymentReceipts(ownerId, id, true);
     return { success: true };
   }
 
@@ -456,7 +456,7 @@ export class LoansService {
       ...loan,
       receipts: ['ACTIVE', 'OVERDUE'].includes(loan.status)
         ? loan.receipts
-        : [],
+        : loan.receipts.filter((receipt) => receipt.kind !== 'PAYMENT'),
       summary: {
         received,
         openBalance:

@@ -25,7 +25,7 @@ DISCORD_RECEIPTS_WEBHOOK_URL=""
 
 O webhook do Discord é opcional e recebe somente alertas de espaço, nunca comprovantes ou dados do cliente. O sistema alerta em 8 GB, entra em nível crítico em 8,5 GB e bloqueia novos arquivos em 9 GB. Esse teto não pode ser configurado acima de 9 GB, preservando margem antes da franquia de 10 GB. Use um bucket dedicado e não envie arquivos manualmente para que o controle permaneça completo.
 
-Imagens são convertidas para WebP sem metadados e limitadas a 1,5 MB após a compactação. PDFs são aceitos até 3 MB. Os comprovantes são privados e apagados quando o empréstimo deixa de estar ativo.
+Imagens são convertidas para WebP sem metadados e limitadas a 1,5 MB após a compactação. PDFs são aceitos até 3 MB. Os comprovantes são privados. Quando um contrato é encerrado, cancelado ou renovado, os comprovantes dos pagamentos são apagados e permanece somente o comprovante do valor entregue ao cliente (liberação original ou dinheiro novo da renovação). A exclusão definitiva do empréstimo apaga todos os arquivos dele.
 
 Em uma instalação existente, aplique a nova tabela antes de publicar a versão:
 

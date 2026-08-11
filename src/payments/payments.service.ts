@@ -313,7 +313,7 @@ export class PaymentsService {
     });
 
     if (!['ACTIVE', 'OVERDUE'].includes(result.loanStatus)) {
-      await this.receipts.purgeLoan(ownerId, dto.loanId, true);
+      await this.receipts.purgePaymentReceipts(ownerId, dto.loanId, true);
     }
     return result;
   }

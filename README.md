@@ -58,6 +58,10 @@ Imagens são convertidas para WebP sem metadados e limitadas a 1,5 MB após a co
 
 Novos arquivos são organizados no bucket por usuário, nome do cliente e contrato. Comprovantes de pagamento recebem nomes como `parcela-03--pix--2026-08-11--<id>.pdf`, facilitando a busca manual no painel do R2. Objetos antigos permanecem no caminho original e continuam acessíveis pelo sistema.
 
+Ao visualizar um comprovante, a API entrega um link privado do R2 válido por 60 segundos. O arquivo não atravessa o Render, reduzindo o consumo da franquia de tráfego da API. A API também limita cada IP a 120 solicitações por minuto; login e cadastro permitem 5 tentativas por minuto e bloqueiam novas tentativas por 5 minutos quando o limite é excedido. As consultas de espaço e os envios de comprovantes são limitados a 10 por minuto.
+
+O uso do PostgreSQL é verificado pela própria API. O sistema mostra um aviso no MFlow e envia uma notificação ao Discord ao atingir 350 MB, 425 MB e 475 MB, antes do limite gratuito de 500 MB do Supabase. `DISCORD_ALERTS_WEBHOOK_URL` é opcional; quando ele não está configurado, o sistema reutiliza `DISCORD_RECEIPTS_WEBHOOK_URL`. Esses valores podem ser ajustados pelas variáveis `DATABASE_WARNING_BYTES`, `DATABASE_CRITICAL_BYTES` e `DATABASE_DANGER_BYTES`.
+
 Em uma instalação PostgreSQL existente, aplique novas migrations antes de publicar a versão:
 
 ```bash

@@ -11,6 +11,7 @@ import { PaymentType, Prisma, ReceiptKind } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import sharp from 'sharp';
+import { DatabaseUsageService } from '../common/database-usage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReceiptDto } from './dto/create-receipt.dto';
 import { ReceiptStorageService } from './receipt-storage.service';
@@ -23,6 +24,7 @@ const SAFE_HARD_LIMIT_BYTES = 9_000_000_000;
 const DEFAULT_WARNING_BYTES = 8_000_000_000;
 const DEFAULT_CRITICAL_BYTES = 8_500_000_000;
 const STORAGE_STATE_ID = 'receipts';
+const DEFAULT_SIGNED_URL_TTL_SECONDS = 60;
 
 type StorageLevel = 'NORMAL' | 'WARNING' | 'CRITICAL' | 'BLOCKED';
 const publicReceiptSelect = {
@@ -70,10 +72,21 @@ export class ReceiptsService implements OnModuleInit {
     ),
     this.hardLimitBytes,
   );
+  private readonly signedUrlTtlSeconds = Math.min(
+    Math.max(
+      this.positiveEnv(
+        'RECEIPT_SIGNED_URL_TTL_SECONDS',
+        DEFAULT_SIGNED_URL_TTL_SECONDS,
+      ),
+      30,
+    ),
+    300,
+  );
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: ReceiptStorageService,
+    private readonly databaseUsage: DatabaseUsageService,
   ) {}
 
   async onModuleInit() {
@@ -174,15 +187,19 @@ export class ReceiptsService implements OnModuleInit {
     return receipt;
   }
 
-  async file(ownerId: string, id: string) {
+  async fileUrl(ownerId: string, id: string) {
     const receipt = await this.prisma.receipt.findFirst({
       where: { id, ownerId },
     });
     if (!receipt) throw new NotFoundException('Comprovante não encontrado.');
     return {
-      buffer: await this.storage.get(receipt.objectKey),
-      mimeType: receipt.mimeType,
-      originalName: receipt.originalName,
+      url: await this.storage.signedGetUrl(
+        receipt.objectKey,
+        receipt.mimeType,
+        receipt.originalName,
+        this.signedUrlTtlSeconds,
+      ),
+      expiresIn: this.signedUrlTtlSeconds,
     };
   }
 
@@ -198,9 +215,12 @@ export class ReceiptsService implements OnModuleInit {
 
   async status(ownerId: string) {
     await this.purgeInactiveLoans(ownerId, true);
-    const status = await this.storageStatus(false);
+    const [status, database] = await Promise.all([
+      this.storageStatus(false),
+      this.databaseUsage.status(true),
+    ]);
     await this.notifyIfNeeded(status);
-    return status;
+    return { ...status, database };
   }
 
   async purgeLoan(ownerId: string, loanId: string, bestEffort = false) {

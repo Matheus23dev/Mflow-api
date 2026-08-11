@@ -12,6 +12,8 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: API_RATE_LIMIT_PER_MINUTE
+        value: "120"
       - key: FRONTEND_URL
         sync: false
       - key: R2_ACCOUNT_ID
@@ -30,3 +32,11 @@ services:
         value: "8500000000"
       - key: RECEIPTS_HARD_LIMIT_BYTES
         value: "9000000000"
+      - key: RECEIPT_SIGNED_URL_TTL_SECONDS
+        value: "60"
+      - key: DATABASE_WARNING_BYTES
+        value: "350000000"
+      - key: DATABASE_CRITICAL_BYTES
+        value: "425000000"
+      - key: DATABASE_DANGER_BYTES
+        value: "475000000"

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
@@ -19,6 +20,17 @@ import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60_000,
+          limit: Number(process.env.API_RATE_LIMIT_PER_MINUTE) || 120,
+          blockDuration: 60_000,
+        },
+      ],
+      errorMessage:
+        'Muitas solicitações em pouco tempo. Aguarde um minuto e tente novamente.',
+    }),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -35,6 +47,9 @@ import { UsersModule } from './users/users.module';
     ReceiptsModule,
   ],
   controllers: [AppController],
-  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
 })
 export class AppModule {}

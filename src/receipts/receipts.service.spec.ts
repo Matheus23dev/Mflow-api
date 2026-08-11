@@ -1,4 +1,5 @@
 import { ReceiptKind } from '@prisma/client';
+import { DatabaseUsageService } from '../common/database-usage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { ReceiptsService } from './receipts.service';
@@ -13,7 +14,8 @@ describe('ReceiptsService', () => {
   const storage = {
     removeMany,
   } as unknown as ReceiptStorageService;
-  const service = new ReceiptsService(prisma, storage);
+  const databaseUsage = {} as DatabaseUsageService;
+  const service = new ReceiptsService(prisma, storage, databaseUsage);
 
   beforeEach(() => {
     jest.clearAllMocks();

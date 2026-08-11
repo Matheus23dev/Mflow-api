@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from './current-user.decorator';
 import { AuthService } from './auth.service';
 import type { AuthUser } from './auth.types';
@@ -18,12 +19,14 @@ export class AuthController {
 
   @Public()
   @Post('register')
+  @Throttle({ default: { limit: 5, ttl: 60_000, blockDuration: 300_000 } })
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
   }
 
   @Public()
   @Post('login')
+  @Throttle({ default: { limit: 5, ttl: 60_000, blockDuration: 300_000 } })
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
   }

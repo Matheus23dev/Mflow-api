@@ -5,6 +5,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
 export class ReceiptStorageService {
@@ -47,17 +48,25 @@ export class ReceiptStorageService {
     );
   }
 
-  async get(key: string) {
+  async signedGetUrl(
+    key: string,
+    contentType: string,
+    originalName: string,
+    expiresIn: number,
+  ) {
     const client = this.ensureConfigured();
-    const result = await client.send(
-      new GetObjectCommand({ Bucket: this.bucket!, Key: key }),
+    const safeName = originalName.replace(/[\r\n]/g, '').slice(0, 180);
+    return getSignedUrl(
+      client,
+      new GetObjectCommand({
+        Bucket: this.bucket!,
+        Key: key,
+        ResponseContentType: contentType,
+        ResponseCacheControl: 'private, no-store',
+        ResponseContentDisposition: `inline; filename*=UTF-8''${encodeURIComponent(safeName)}`,
+      }),
+      { expiresIn },
     );
-    if (!result.Body) {
-      throw new ServiceUnavailableException(
-        'O comprovante não pôde ser lido no armazenamento.',
-      );
-    }
-    return Buffer.from(await result.Body.transformToByteArray());
   }
 
   async removeMany(keys: string[]) {

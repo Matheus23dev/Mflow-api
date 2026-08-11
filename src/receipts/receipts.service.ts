@@ -7,7 +7,7 @@ import {
   OnModuleInit,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
-import { Prisma, ReceiptKind } from '@prisma/client';
+import { PaymentType, Prisma, ReceiptKind } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -38,6 +38,19 @@ const publicReceiptSelect = {
 type PublicReceipt = Prisma.ReceiptGetPayload<{
   select: typeof publicReceiptSelect;
 }>;
+type ReceiptLoanContext = {
+  id: string;
+  loanDate: Date;
+  customer: { id: string; name: string };
+};
+type ReceiptPaymentContext = {
+  id: string;
+  type: PaymentType;
+  paymentDate: Date;
+  paymentMethod: string;
+  installment: { number: number } | null;
+  monthlyCharge: { referenceMonth: string } | null;
+} | null;
 
 @Injectable()
 export class ReceiptsService implements OnModuleInit {
@@ -97,7 +110,7 @@ export class ReceiptsService implements OnModuleInit {
         'Comprovantes só podem ser salvos em empréstimos ativos.',
       );
     }
-    await this.validatePayment(ownerId, loanId, dto);
+    const payment = await this.validatePayment(ownerId, loanId, dto);
     const optimized = await this.optimize(file);
     const before = await this.storageStatus(false);
     if (!before.configured) {
@@ -117,7 +130,13 @@ export class ReceiptsService implements OnModuleInit {
     const checksum = createHash('sha256')
       .update(optimized.buffer)
       .digest('hex');
-    const objectKey = `${ownerId}/${loanId}/${randomUUID()}.${optimized.extension}`;
+    const objectKey = this.objectKey(
+      ownerId,
+      loan,
+      dto.kind,
+      payment,
+      optimized.extension,
+    );
     await this.storage.put(
       objectKey,
       optimized.buffer,
@@ -289,23 +308,95 @@ export class ReceiptsService implements OnModuleInit {
         'Este tipo de comprovante não deve ter um pagamento relacionado.',
       );
     }
-    if (!dto.paymentId) return;
+    if (!dto.paymentId) return null;
     const payment = await this.prisma.payment.findFirst({
       where: { id: dto.paymentId, loanId, customer: { ownerId } },
-      select: { id: true },
+      select: {
+        id: true,
+        type: true,
+        paymentDate: true,
+        paymentMethod: true,
+        installment: { select: { number: true } },
+        monthlyCharge: { select: { referenceMonth: true } },
+      },
     });
     if (!payment) {
       throw new NotFoundException('Pagamento relacionado não encontrado.');
     }
+    return payment;
   }
 
   private async ensureLoanOwner(ownerId: string, loanId: string) {
     const loan = await this.prisma.loan.findFirst({
       where: { id: loanId, customer: { ownerId } },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        loanDate: true,
+        customer: { select: { id: true, name: true } },
+      },
     });
     if (!loan) throw new NotFoundException('Empréstimo não encontrado.');
     return loan;
+  }
+
+  private objectKey(
+    ownerId: string,
+    loan: ReceiptLoanContext,
+    kind: ReceiptKind,
+    payment: ReceiptPaymentContext,
+    extension: string,
+  ) {
+    const customerFolder = `${this.slug(loan.customer.name, 'cliente')}--${this.slug(loan.customer.id.slice(-8), 'id')}`;
+    const contractFolder = `${this.datePart(loan.loanDate)}--${this.slug(loan.id, 'contrato')}`;
+    const base = `usuarios/${this.slug(ownerId, 'usuario')}/clientes/${customerFolder}/contratos/${contractFolder}`;
+    const unique = randomUUID();
+
+    if (kind === ReceiptKind.LOAN_DISBURSEMENT) {
+      return `${base}/valor-emprestado/valor-emprestado--${this.datePart(loan.loanDate)}--${unique}.${extension}`;
+    }
+    if (kind === ReceiptKind.RENEWAL) {
+      return `${base}/renovacao/dinheiro-novo-renovacao--${this.datePart(loan.loanDate)}--${unique}.${extension}`;
+    }
+
+    const label = this.paymentLabel(payment);
+    const paymentDate = payment?.paymentDate || new Date();
+    return `${base}/pagamentos/${label}--${this.datePart(paymentDate)}--${unique}.${extension}`;
+  }
+
+  private paymentLabel(payment: ReceiptPaymentContext) {
+    if (!payment) return 'pagamento';
+    const method = this.slug(payment.paymentMethod, 'pagamento');
+    if (payment.installment) {
+      return `parcela-${String(payment.installment.number).padStart(2, '0')}--${method}`;
+    }
+    if (payment.monthlyCharge) {
+      return `juros-${this.slug(payment.monthlyCharge.referenceMonth, 'mensal')}--${method}`;
+    }
+    const labels: Record<PaymentType, string> = {
+      INSTALLMENT: 'parcela',
+      INTEREST: 'juros',
+      PRINCIPAL: 'abatimento-principal',
+      PAYOFF: 'quitacao',
+      RENEWAL_ENTRY: 'entrada-renovacao',
+    };
+    return `${labels[payment.type]}--${method}`;
+  }
+
+  private slug(value: string, fallback: string) {
+    return (
+      value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 100) || fallback
+    );
+  }
+
+  private datePart(value: Date) {
+    return value.toISOString().slice(0, 10);
   }
 
   private async optimize(file: Express.Multer.File) {

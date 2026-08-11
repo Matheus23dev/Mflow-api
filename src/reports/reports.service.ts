@@ -41,34 +41,39 @@ export class ReportsService {
       (sum, payment) => sum + numberOf(payment.amount),
       0,
     );
-    const interestReceived = paymentsInPeriod
-      .filter((payment) => payment.type === 'INTEREST')
-      .reduce(
-        (sum, payment) =>
-          sum + numberOf(payment.amount) - numberOf(payment.lateFeeAmount),
-        0,
-      );
-    const capitalRecovered = paymentsInPeriod.reduce((sum, payment) => {
-      const baseAmount =
-        numberOf(payment.amount) - numberOf(payment.lateFeeAmount);
-      if (payment.type === 'PRINCIPAL') return sum + baseAmount;
-      if (
-        ['INSTALLMENT', 'PAYOFF', 'RENEWAL_ENTRY'].includes(payment.type) &&
-        payment.loan.type === 'WEEKLY' &&
-        numberOf(payment.loan.totalContracted) > 0
-      ) {
-        return (
-          sum +
-          baseAmount *
-            (numberOf(payment.loan.principalAmount) /
-              numberOf(payment.loan.totalContracted))
-        );
-      }
-      if (payment.type === 'PAYOFF') {
-        return sum + baseAmount;
-      }
-      return sum;
-    }, 0);
+    const allocations = paymentsInPeriod.reduce(
+      (totals, payment) => {
+        const baseAmount =
+          numberOf(payment.amount) - numberOf(payment.lateFeeAmount);
+        if (payment.type === 'INTEREST') {
+          totals.interest += baseAmount;
+          return totals;
+        }
+        if (payment.type === 'PRINCIPAL' || payment.type === 'RENEWAL_ENTRY') {
+          totals.capital += baseAmount;
+          return totals;
+        }
+        if (
+          ['INSTALLMENT', 'PAYOFF'].includes(payment.type) &&
+          payment.loan.type === 'WEEKLY' &&
+          numberOf(payment.loan.totalContracted) > 0
+        ) {
+          const capitalRatio =
+            numberOf(payment.loan.principalAmount) /
+            numberOf(payment.loan.totalContracted);
+          totals.capital += baseAmount * capitalRatio;
+          totals.interest += baseAmount * (1 - capitalRatio);
+          return totals;
+        }
+        if (payment.type === 'PAYOFF') {
+          totals.capital += baseAmount;
+        }
+        return totals;
+      },
+      { capital: 0, interest: 0 },
+    );
+    const capitalRecovered = allocations.capital;
+    const interestReceived = allocations.interest;
     const openBalance = activeLoans.reduce((sum, loan) => {
       const charges = (
         loan.type === 'WEEKLY' ? loan.installments : loan.monthlyCharges

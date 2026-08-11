@@ -27,6 +27,8 @@ O webhook do Discord é opcional e recebe somente alertas de espaço, nunca comp
 
 Imagens são convertidas para WebP sem metadados e limitadas a 1,5 MB após a compactação. PDFs são aceitos até 3 MB. Os comprovantes são privados. Quando um contrato é encerrado, cancelado ou renovado, os comprovantes dos pagamentos são apagados e permanece somente o comprovante do valor entregue ao cliente (liberação original ou dinheiro novo da renovação). A exclusão definitiva do empréstimo apaga todos os arquivos dele.
 
+Novos arquivos são organizados no bucket por usuário, nome do cliente e contrato. Comprovantes de pagamento recebem nomes como `parcela-03--pix--2026-08-11--<id>.pdf`, facilitando a busca manual no painel do R2. Objetos antigos permanecem no caminho original e continuam acessíveis pelo sistema.
+
 Em uma instalação existente, aplique a nova tabela antes de publicar a versão:
 
 ```bash

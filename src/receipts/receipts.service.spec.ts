@@ -49,4 +49,39 @@ describe('ReceiptsService', () => {
       select: { id: true, objectKey: true },
     });
   });
+
+  it('organizes payment files by customer, contract and installment', () => {
+    const objectKey = (
+      service as unknown as {
+        objectKey: (
+          ownerId: string,
+          loan: unknown,
+          kind: ReceiptKind,
+          payment: unknown,
+          extension: string,
+        ) => string;
+      }
+    ).objectKey(
+      'owner-1',
+      {
+        id: 'loan-123',
+        loanDate: new Date('2026-08-01T12:00:00.000Z'),
+        customer: { id: 'customer-12345678', name: 'João da Silva' },
+      },
+      ReceiptKind.PAYMENT,
+      {
+        id: 'payment-1',
+        type: 'INSTALLMENT',
+        paymentDate: new Date('2026-08-11T12:00:00.000Z'),
+        paymentMethod: 'PIX',
+        installment: { number: 3 },
+        monthlyCharge: null,
+      },
+      'pdf',
+    );
+
+    expect(objectKey).toMatch(
+      /^usuarios\/owner-1\/clientes\/joao-da-silva--12345678\/contratos\/2026-08-01--loan-123\/pagamentos\/parcela-03--pix--2026-08-11--[a-f0-9-]+\.pdf$/,
+    );
+  });
 });

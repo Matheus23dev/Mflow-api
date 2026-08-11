@@ -330,6 +330,38 @@ export class LoansService {
     return { success: true };
   }
 
+  async remove(ownerId: string, id: string) {
+    await this.ensureOwner(ownerId, id);
+
+    await this.prisma.$transaction(async (tx) => {
+      const paymentIds = (
+        await tx.payment.findMany({
+          where: { loanId: id },
+          select: { id: true },
+        })
+      ).map((payment) => payment.id);
+
+      await tx.cashTransaction.deleteMany({
+        where: {
+          OR: [
+            { loanId: id },
+            ...(paymentIds.length ? [{ paymentId: { in: paymentIds } }] : []),
+          ],
+        },
+      });
+      await tx.payment.deleteMany({ where: { loanId: id } });
+      await tx.installment.deleteMany({ where: { loanId: id } });
+      await tx.monthlyCharge.deleteMany({ where: { loanId: id } });
+      await tx.loan.updateMany({
+        where: { previousLoanId: id },
+        data: { previousLoanId: null },
+      });
+      await tx.loan.delete({ where: { id } });
+    });
+
+    return { success: true };
+  }
+
   private validate(dto: CreateLoanDto) {
     if (
       dto.type === LoanType.WEEKLY &&

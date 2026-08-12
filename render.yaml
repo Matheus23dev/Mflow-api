@@ -33,7 +33,7 @@ services:
       - key: RECEIPTS_HARD_LIMIT_BYTES
         value: "9000000000"
       - key: RECEIPT_SIGNED_URL_TTL_SECONDS
-        value: "60"
+        value: "300"
       - key: DATABASE_WARNING_BYTES
         value: "350000000"
       - key: DATABASE_CRITICAL_BYTES

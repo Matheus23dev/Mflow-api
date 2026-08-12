@@ -5,11 +5,13 @@ import {
   Get,
   Param,
   Post,
+  Res,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth.types';
@@ -48,10 +50,27 @@ export class ReceiptsController {
     return this.receipts.create(user.id, loanId, dto, file);
   }
 
+  @Get(':id/file-url')
+  @Throttle({ default: { limit: 60, ttl: 60_000, blockDuration: 60_000 } })
+  fileUrl(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.receipts.fileUrl(user.id, id);
+  }
+
   @Get(':id/file')
   @Throttle({ default: { limit: 60, ttl: 60_000, blockDuration: 60_000 } })
-  file(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.receipts.fileUrl(user.id, id);
+  async file(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Res() response: Response,
+  ) {
+    const receipt = await this.receipts.file(user.id, id);
+    response.setHeader('Content-Type', receipt.mimeType);
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader(
+      'Content-Disposition',
+      `inline; filename*=UTF-8''${encodeURIComponent(receipt.originalName)}`,
+    );
+    response.send(receipt.buffer);
   }
 
   @Delete(':id')

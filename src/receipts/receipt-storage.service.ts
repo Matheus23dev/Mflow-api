@@ -69,6 +69,19 @@ export class ReceiptStorageService {
     );
   }
 
+  async get(key: string) {
+    const client = this.ensureConfigured();
+    const result = await client.send(
+      new GetObjectCommand({ Bucket: this.bucket!, Key: key }),
+    );
+    if (!result.Body) {
+      throw new ServiceUnavailableException(
+        'O comprovante não pôde ser lido no armazenamento.',
+      );
+    }
+    return Buffer.from(await result.Body.transformToByteArray());
+  }
+
   async removeMany(keys: string[]) {
     if (!keys.length) return;
     const client = this.ensureConfigured();

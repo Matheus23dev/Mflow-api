@@ -24,7 +24,7 @@ const SAFE_HARD_LIMIT_BYTES = 9_000_000_000;
 const DEFAULT_WARNING_BYTES = 8_000_000_000;
 const DEFAULT_CRITICAL_BYTES = 8_500_000_000;
 const STORAGE_STATE_ID = 'receipts';
-const DEFAULT_SIGNED_URL_TTL_SECONDS = 60;
+const DEFAULT_SIGNED_URL_TTL_SECONDS = 300;
 
 type StorageLevel = 'NORMAL' | 'WARNING' | 'CRITICAL' | 'BLOCKED';
 const publicReceiptSelect = {
@@ -200,6 +200,18 @@ export class ReceiptsService implements OnModuleInit {
         this.signedUrlTtlSeconds,
       ),
       expiresIn: this.signedUrlTtlSeconds,
+    };
+  }
+
+  async file(ownerId: string, id: string) {
+    const receipt = await this.prisma.receipt.findFirst({
+      where: { id, ownerId },
+    });
+    if (!receipt) throw new NotFoundException('Comprovante não encontrado.');
+    return {
+      buffer: await this.storage.get(receipt.objectKey),
+      mimeType: receipt.mimeType,
+      originalName: receipt.originalName,
     };
   }
 

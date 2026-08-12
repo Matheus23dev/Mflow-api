@@ -98,6 +98,7 @@ model Loan {
   id                    String            @id @default(cuid())
   customerId            String
   customer              Customer          @relation(fields: [customerId], references: [id])
+  description           String?           @db.Text
   type                  LoanType
   frequency             LoanFrequency?    @default(WEEKLY)
   principalAmount       Decimal           @db.Decimal(15, 2)

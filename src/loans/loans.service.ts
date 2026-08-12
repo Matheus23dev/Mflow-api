@@ -105,6 +105,7 @@ export class LoansService {
         const loan = await tx.loan.create({
           data: {
             customerId: dto.customerId,
+            description: dto.description?.trim() || null,
             type: dto.type,
             frequency: isWeekly
               ? dto.frequency || LoanFrequency.WEEKLY
@@ -285,6 +286,10 @@ export class LoansService {
             installmentAmount,
             totalContracted,
             lateFeePerDay: dto.lateFeePerDay ?? loan.lateFeePerDay,
+            description:
+              dto.description === undefined
+                ? loan.description
+                : dto.description.trim() || null,
           },
         });
       });
@@ -325,6 +330,10 @@ export class LoansService {
               : (dto.monthlyInterestRate ?? loan.monthlyInterestRate),
             monthlyInterestAmount: interestAmount,
             lateFeePerDay: dto.lateFeePerDay ?? loan.lateFeePerDay,
+            description:
+              dto.description === undefined
+                ? loan.description
+                : dto.description.trim() || null,
           },
         });
       });

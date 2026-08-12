@@ -5,11 +5,18 @@ import {
   IsInt,
   IsNumber,
   IsOptional,
+  IsString,
+  MaxLength,
   Max,
   Min,
 } from 'class-validator';
 
 export class CreateRenewalDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(9999999999999.99)

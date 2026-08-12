@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Max,
   Min,
 } from 'class-validator';
@@ -13,6 +14,11 @@ import { LoanFrequency, LoanType } from '@prisma/client';
 export class CreateLoanDto {
   @IsString()
   customerId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
 
   @IsEnum(LoanType)
   type!: LoanType;

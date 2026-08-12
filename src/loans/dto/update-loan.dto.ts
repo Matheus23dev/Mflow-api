@@ -5,11 +5,18 @@ import {
   IsInt,
   IsNumber,
   IsOptional,
+  IsString,
+  MaxLength,
   Max,
   Min,
 } from 'class-validator';
 
 export class UpdateLoanDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)

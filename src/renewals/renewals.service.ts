@@ -9,6 +9,7 @@ import { money } from '../common/money.utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReceiptsService } from '../receipts/receipts.service';
 import { CreateRenewalDto } from './dto/create-renewal.dto';
+import { renewalBalance } from './renewal-balance.utils';
 
 @Injectable()
 export class RenewalsService {
@@ -31,7 +32,10 @@ export class RenewalsService {
   async create(ownerId: string, previousLoanId: string, dto: CreateRenewalDto) {
     const oldLoan = await this.prisma.loan.findFirst({
       where: { id: previousLoanId, customer: { ownerId } },
-      include: { customer: true },
+      include: {
+        customer: true,
+        installments: { select: { amount: true, paidAmount: true } },
+      },
     });
     if (!oldLoan) throw new NotFoundException('Empréstimo não encontrado.');
     if (
@@ -42,7 +46,7 @@ export class RenewalsService {
         'Somente empréstimos semanais em andamento podem ser renovados.',
       );
     }
-    const previousBalance = oldLoan.principalBalance;
+    const previousBalance = renewalBalance(oldLoan.installments);
     const entry = money(dto.entryAmount);
     if (entry.greaterThan(previousBalance))
       throw new BadRequestException('A entrada supera o saldo anterior.');
@@ -100,6 +104,10 @@ export class RenewalsService {
       const loan = await tx.loan.create({
         data: {
           customerId: oldLoan.customerId,
+          description:
+            dto.description === undefined
+              ? oldLoan.description
+              : dto.description.trim() || null,
           type: 'WEEKLY',
           frequency: dto.frequency || LoanFrequency.WEEKLY,
           principalAmount: newBase,

@@ -11,6 +11,7 @@ describe('DashboardService', () => {
         type: 'WEEKLY',
         principalAmount: '2000',
         principalBalance: '1000',
+        totalContracted: '3200',
         installments: [
           { amount: '400', paidAmount: '400' },
           { amount: '400', paidAmount: '0' },
@@ -24,8 +25,27 @@ describe('DashboardService', () => {
         principalAmount: '3000',
         principalBalance: '2500',
         installments: [],
-        monthlyCharges: [{ interestAmount: '300', paidAmount: '50' }],
-        payments: [],
+        monthlyCharges: [
+          {
+            interestAmount: '300',
+            paidAmount: '50',
+            dueDate: new Date(),
+          },
+        ],
+        payments: [
+          {
+            type: 'INTEREST',
+            amount: '210',
+            lateFeeAmount: '10',
+            paymentDate: new Date(),
+          },
+          {
+            type: 'PRINCIPAL',
+            amount: '500',
+            lateFeeAmount: '0',
+            paymentDate: new Date(),
+          },
+        ],
       },
       {
         status: 'PAID',
@@ -60,6 +80,28 @@ describe('DashboardService', () => {
     expect(result.metrics.capitalLent).toBe(5000);
     expect(result.metrics.openBalance).toBe(3150);
     expect(result.metrics.totalExpected).toBe(3150);
+    expect(result.portfolios.weekly).toEqual({
+      activeContracts: 1,
+      capitalLent: 2000,
+      totalContracted: 3200,
+      received: 400,
+      remainingReceivable: 400,
+      contractedProfit: 1200,
+      overdueAmount: 0,
+      overdueInstallments: 0,
+      collectionRate: 12.5,
+    });
+    expect(result.portfolios.monthlyInterest).toEqual({
+      activeContracts: 1,
+      capitalLent: 3000,
+      capitalInCirculation: 2500,
+      interestDueThisMonth: 300,
+      interestReceivedThisMonth: 200,
+      interestRemainingThisMonth: 250,
+      previousInterestOverdue: 0,
+      principalReturnedThisMonth: 500,
+      monthlyYieldRate: 8,
+    });
   });
 
   it('calcula o atraso pela lista vencida, mesmo sem cobranças futuras', async () => {

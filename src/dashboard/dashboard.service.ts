@@ -60,7 +60,7 @@ export class DashboardService {
       ['ACTIVE', 'OVERDUE'].includes(loan.status),
     );
     const capitalLent = active.reduce(
-      (sum, loan) => sum + numberOf(loan.principalBalance),
+      (sum, loan) => sum + numberOf(loan.principalAmount),
       0,
     );
     const totalExpected = active.reduce((sum, loan) => {

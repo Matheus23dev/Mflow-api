@@ -82,8 +82,11 @@ export class PaymentsService {
         }
 
         const outstanding = item.amount.sub(item.paidAmount);
-        const fee = money(overdueDays(item.dueDate, paymentDate)).mul(
+        const fee = this.lateFeeFor(
+          item.dueDate,
+          paymentDate,
           loan.lateFeePerDay,
+          dto.waiveLateFee,
         );
         const parts = this.paymentParts(paymentAmount, outstanding, fee);
         const paidAmount = item.paidAmount.add(parts.baseApplied);
@@ -147,8 +150,11 @@ export class PaymentsService {
         }
 
         const outstanding = charge.interestAmount.sub(charge.paidAmount);
-        const fee = money(overdueDays(charge.dueDate, paymentDate)).mul(
+        const fee = this.lateFeeFor(
+          charge.dueDate,
+          paymentDate,
           loan.lateFeePerDay,
+          dto.waiveLateFee,
         );
         const parts = this.paymentParts(paymentAmount, outstanding, fee);
         const paidAmount = charge.paidAmount.add(parts.baseApplied);
@@ -345,6 +351,16 @@ export class PaymentsService {
         : Prisma.Decimal.min(payment, outstanding),
       lateFeeApplied: closesCharge ? fee : money(0),
     };
+  }
+
+  private lateFeeFor(
+    dueDate: Date,
+    paymentDate: Date,
+    lateFeePerDay: Prisma.Decimal,
+    waiveLateFee = false,
+  ) {
+    if (waiveLateFee) return money(0);
+    return money(overdueDays(dueDate, paymentDate)).mul(lateFeePerDay);
   }
 
   private async updateMonthlyLoanStatus(

@@ -1,5 +1,6 @@
 import { PaymentMethod, PaymentType } from '@prisma/client';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsNumber,
@@ -35,6 +36,10 @@ export class CreatePaymentDto {
 
   @IsEnum(PaymentMethod)
   paymentMethod!: PaymentMethod;
+
+  @IsOptional()
+  @IsBoolean()
+  waiveLateFee?: boolean;
 
   @IsOptional()
   @IsString()

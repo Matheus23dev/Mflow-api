@@ -152,10 +152,12 @@ export class CustomersService {
       data: {
         name: dto.name?.trim(),
         phone: dto.phone?.trim(),
-        cpf: dto.cpf === undefined ? undefined : dto.cpf.trim() || null,
+        cpf:
+          dto.cpf === undefined ? undefined : dto.cpf?.trim() || null,
         address:
-          dto.address === undefined ? undefined : dto.address.trim() || null,
-        notes: dto.notes === undefined ? undefined : dto.notes.trim() || null,
+          dto.address === undefined ? undefined : dto.address?.trim() || null,
+        notes:
+          dto.notes === undefined ? undefined : dto.notes?.trim() || null,
       },
     });
   }

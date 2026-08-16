@@ -14,15 +14,15 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   @MaxLength(20)
-  cpf?: string;
+  cpf?: string | null;
 
   @IsOptional()
   @IsString()
   @MaxLength(191)
-  address?: string;
+  address?: string | null;
 
   @IsOptional()
   @IsString()
   @MaxLength(5000)
-  notes?: string;
+  notes?: string | null;
 }

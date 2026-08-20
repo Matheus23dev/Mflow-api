@@ -6,10 +6,11 @@ export class CreateCustomerDto {
   @MaxLength(120)
   name!: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(8)
   @MaxLength(30)
-  phone!: string;
+  phone?: string | null;
 
   @IsOptional()
   @IsString()

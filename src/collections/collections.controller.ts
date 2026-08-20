@@ -11,8 +11,10 @@ export class CollectionsController {
   list(
     @CurrentUser() user: AuthUser,
     @Query('filter')
-    filter?: 'today' | 'tomorrow' | 'week' | 'overdue' | '30days',
+    filter?: 'today' | 'tomorrow' | 'week' | 'overdue' | '30days' | 'custom',
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
-    return this.collections.list(user.id, filter);
+    return this.collections.list(user.id, filter, true, from, to);
   }
 }

@@ -1,11 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { endOfUtcDay, overdueDays, startOfUtcDay } from '../common/date.utils';
 import { numberOf } from '../common/money.utils';
 import { PortfolioStatusService } from '../common/portfolio-status.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-type CollectionFilter = 'today' | 'tomorrow' | 'week' | 'overdue' | '30days';
+type CollectionFilter =
+  'today' | 'tomorrow' | 'week' | 'overdue' | '30days' | 'custom';
 
 @Injectable()
 export class CollectionsService {
@@ -18,9 +19,14 @@ export class CollectionsService {
     ownerId: string,
     filter: CollectionFilter = '30days',
     shouldRefresh = true,
+    fromDate?: string,
+    toDate?: string,
   ) {
     if (shouldRefresh) await this.portfolioStatus.refresh(ownerId);
-    const { from, to, overdueOnly } = this.range(filter);
+    const { from, to, overdueOnly } =
+      fromDate || toDate
+        ? this.customRange(fromDate, toDate)
+        : this.range(filter);
     const baseWhere = {
       loan: {
         customer: { ownerId },
@@ -119,5 +125,29 @@ export class CollectionsService {
       to: endOfUtcDay(to),
       overdueOnly: filter === 'overdue',
     };
+  }
+
+  private customRange(fromValue?: string, toValue?: string) {
+    const validDate = /^\d{4}-\d{2}-\d{2}$/;
+    if (
+      !fromValue ||
+      !toValue ||
+      !validDate.test(fromValue) ||
+      !validDate.test(toValue)
+    ) {
+      throw new BadRequestException('Informe um período válido.');
+    }
+    const from = new Date(`${fromValue}T00:00:00.000Z`);
+    const to = new Date(`${toValue}T00:00:00.000Z`);
+    if (
+      Number.isNaN(from.getTime()) ||
+      Number.isNaN(to.getTime()) ||
+      from.toISOString().slice(0, 10) !== fromValue ||
+      to.toISOString().slice(0, 10) !== toValue ||
+      from > to
+    ) {
+      throw new BadRequestException('Informe um período válido.');
+    }
+    return { from, to: endOfUtcDay(to), overdueOnly: false };
   }
 }

@@ -9,6 +9,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 
+const digitsOnly = (value?: string | null) => value?.replace(/\D/g, '') || '';
+
 @Injectable()
 export class CustomersService {
   constructor(
@@ -137,8 +139,8 @@ export class CustomersService {
       data: {
         ownerId,
         name: dto.name.trim(),
-        phone: dto.phone.trim(),
-        cpf: dto.cpf?.trim() || null,
+        phone: digitsOnly(dto.phone),
+        cpf: digitsOnly(dto.cpf) || null,
         address: dto.address?.trim() || null,
         notes: dto.notes?.trim() || null,
       },
@@ -151,13 +153,11 @@ export class CustomersService {
       where: { id },
       data: {
         name: dto.name?.trim(),
-        phone: dto.phone?.trim(),
-        cpf:
-          dto.cpf === undefined ? undefined : dto.cpf?.trim() || null,
+        phone: dto.phone === undefined ? undefined : digitsOnly(dto.phone),
+        cpf: dto.cpf === undefined ? undefined : digitsOnly(dto.cpf) || null,
         address:
           dto.address === undefined ? undefined : dto.address?.trim() || null,
-        notes:
-          dto.notes === undefined ? undefined : dto.notes?.trim() || null,
+        notes: dto.notes === undefined ? undefined : dto.notes?.trim() || null,
       },
     });
   }
